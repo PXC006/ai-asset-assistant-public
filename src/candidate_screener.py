@@ -232,7 +232,7 @@ def screen_candidates_by_direction(asset_class: str, direction: str, max_results
         code = str(item.get("代码", "")).strip()
         if not code:
             continue
-        data_result = fetch_asset_data_auto(code, preferred_type="自动识别")
+        data_result = fetch_asset_data_auto(code, preferred_type="自动识别", strict=False)
         history = data_result.get("data", pd.DataFrame()) if data_result.get("success") else pd.DataFrame()
         liquidity = _money(item.get("成交额")) or _money(item.get("规模"))
         metrics = _score_metrics(asset_class, direction, history, liquidity)

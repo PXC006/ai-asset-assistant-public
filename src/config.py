@@ -5,6 +5,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 PUBLIC_EMPTY_MODE = True
 PRIVATE_MODE = False
+APP_VERSION = "public-demo-2026-06-30-strict-data-v1"
 DB_PATH = DATA_DIR / "public_empty.db"
 
 DEFAULT_CURRENT_AGE = 0

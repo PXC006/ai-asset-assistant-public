@@ -1,8 +1,101 @@
+import hashlib
+import json
+import os
+import platform
 import re
 from typing import Any
 
 import pandas as pd
 
+from .config import APP_VERSION
+
+
+ETF_PREFIXES = ("510", "511", "512", "513", "515", "516", "517", "518", "519", "560", "561", "562", "563", "588", "159")
+LOF_PREFIXES = ("501", "502", "160", "161", "162", "163", "164", "165", "166", "167")
+OPEN_FUND_PREFIXES = ("000", "001", "002", "003", "004", "005", "006", "007", "008", "009")
+STOCK_PREFIXES = ("600", "601", "603", "605", "300", "301", "688")
+
+ASSET_TYPE_LABELS = {
+    "ETF": "ETF",
+    "LOF": "LOF / 场内基金",
+    "OPEN_FUND": "开放式基金",
+    "A_STOCK": "A 股股票",
+    "US_ETF": "美股 / 海外 ETF",
+    "UNKNOWN": "未知",
+}
+
+SOURCE_OPTIONS_MAP = {
+    "ETF 场内行情": "ETF",
+    "LOF / 场内基金行情": "LOF",
+    "开放式基金净值": "OPEN_FUND",
+    "A 股股票行情": "A_STOCK",
+    "美股 / 海外 ETF": "US_ETF",
+    "中国ETF": "ETF",
+    "中国LOF": "LOF",
+    "中国开放式基金": "OPEN_FUND",
+    "中国股票": "A_STOCK",
+    "美股ETF": "US_ETF",
+}
+
+
+def infer_asset_type_by_code(code: str) -> str:
+    """根据代码本身确定优先资产类型，不依赖接口成功顺序。"""
+    code = str(code or "").strip().upper()
+    if re.fullmatch(r"[A-Z.]{1,10}", code):
+        return "US_ETF"
+    if not re.fullmatch(r"\d{6}", code):
+        return "UNKNOWN"
+    if code.startswith(ETF_PREFIXES):
+        return "ETF"
+    if code.startswith(LOF_PREFIXES):
+        return "LOF"
+    if code.startswith(OPEN_FUND_PREFIXES):
+        return "OPEN_FUND"
+    if code.startswith(STOCK_PREFIXES):
+        return "A_STOCK"
+    return "UNKNOWN"
+
+
+def _asset_label(asset_key: str) -> str:
+    return ASSET_TYPE_LABELS.get(asset_key, asset_key or "未知")
+
+
+def _runtime_versions() -> dict[str, str]:
+    versions = {
+        "pandas": pd.__version__,
+        "numpy": "",
+        "streamlit": "",
+        "akshare": "",
+    }
+    try:
+        import numpy as np
+
+        versions["numpy"] = np.__version__
+    except Exception:
+        pass
+    try:
+        import streamlit as st
+
+        versions["streamlit"] = st.__version__
+    except Exception:
+        pass
+    try:
+        import akshare as ak
+
+        versions["akshare"] = getattr(ak, "__version__", "")
+    except Exception:
+        pass
+    return versions
+
+
+def current_environment_label() -> str:
+    if os.getenv("STREAMLIT_SHARING_MODE") or os.getenv("STREAMLIT_CLOUD"):
+        return "cloud"
+    cwd = os.getcwd().lower().replace("\\", "/")
+    home = str(os.getenv("HOME", "")).lower().replace("\\", "/")
+    if "site-packages" in cwd or "/mount/src" in cwd or "appuser" in home:
+        return "cloud"
+    return "local"
 
 def _pick_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
     if df is None or df.empty:
@@ -125,13 +218,81 @@ def _normalize_frame(df: pd.DataFrame, date_col: str | None = None, close_col: s
     return result.dropna().sort_values("date").reset_index(drop=True)
 
 
-def _result(success: bool, asset_type: str, data: pd.DataFrame | None, message: str, asset_name: str = "") -> dict[str, Any]:
+def _data_hash(df: pd.DataFrame) -> str:
+    if df is None or df.empty:
+        return ""
+    normalized = df[["date", "close"]].copy()
+    normalized["date"] = pd.to_datetime(normalized["date"]).dt.strftime("%Y-%m-%d")
+    normalized["close"] = pd.to_numeric(normalized["close"], errors="coerce").round(8)
+    payload = normalized.to_csv(index=False).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:16]
+
+
+def _data_profile(df: pd.DataFrame) -> dict[str, Any]:
+    if df is None or df.empty:
+        return {
+            "first_date": "",
+            "latest_date": "",
+            "latest_close": None,
+            "rows": 0,
+            "close_head_3": [],
+            "close_tail_3": [],
+            "data_hash": "",
+        }
+    frame = df.copy()
+    frame["date"] = pd.to_datetime(frame["date"])
+    frame["close"] = pd.to_numeric(frame["close"], errors="coerce")
+    return {
+        "first_date": frame["date"].iloc[0].date().isoformat(),
+        "latest_date": frame["date"].iloc[-1].date().isoformat(),
+        "latest_close": float(frame["close"].iloc[-1]),
+        "rows": int(len(frame)),
+        "close_head_3": [round(float(x), 6) for x in frame["close"].head(3).tolist()],
+        "close_tail_3": [round(float(x), 6) for x in frame["close"].tail(3).tolist()],
+        "data_hash": _data_hash(frame),
+    }
+
+
+def _result(
+    success: bool,
+    asset_type: str,
+    data: pd.DataFrame | None,
+    message: str,
+    asset_name: str = "",
+    *,
+    code: str = "",
+    inferred_type: str = "UNKNOWN",
+    selected_scope: str = "自动识别",
+    actual_scope: str = "",
+    data_source: str = "",
+    quote_type: str = "",
+    adjustment: str = "",
+    used_fallback: bool = False,
+    strict: bool = True,
+    errors: list[str] | None = None,
+) -> dict[str, Any]:
+    frame = data if data is not None else pd.DataFrame(columns=["date", "close"])
+    profile = _data_profile(frame)
     return {
         "success": success,
         "asset_type": asset_type,
+        "inferred_asset_type": _asset_label(inferred_type),
         "asset_name": asset_name or "",
-        "data": data if data is not None else pd.DataFrame(columns=["date", "close"]),
+        "code": code,
+        "data": frame,
         "message": message,
+        "selected_scope": selected_scope,
+        "actual_scope": actual_scope or asset_type,
+        "data_source": data_source,
+        "quote_type": quote_type,
+        "adjustment": adjustment,
+        "used_fallback": used_fallback,
+        "strict": strict,
+        "errors": errors or [],
+        "app_version": APP_VERSION,
+        "environment": current_environment_label(),
+        "runtime_versions": _runtime_versions(),
+        **profile,
     }
 
 
@@ -229,48 +390,127 @@ def _try_us_etf(code: str) -> tuple[pd.DataFrame, str | None]:
         return pd.DataFrame(columns=["date", "close"]), f"美股ETF接口失败：{exc}"
 
 
-def fetch_asset_data_auto(code: str, preferred_type: str = "自动识别") -> dict[str, Any]:
-    """自动识别 ETF、LOF、开放式基金、A股或美股ETF，并返回统一行情数据。"""
+FETCHERS: dict[str, tuple[Any, str, str, str]] = {
+    "ETF": (_try_china_etf, "AKShare ETF", "场内交易价格", "不复权行情"),
+    "LOF": (_try_china_lof, "AKShare LOF", "场内交易价格", "不复权行情"),
+    "OPEN_FUND": (_try_open_fund, "AKShare 开放式基金净值", "基金单位净值", "基金单位净值"),
+    "A_STOCK": (_try_china_stock, "AKShare A股", "复权行情", "前复权行情"),
+    "US_ETF": (_try_us_etf, "yfinance", "不复权行情", "不复权行情"),
+}
+
+
+def _candidate_attempts(inferred: str) -> list[str]:
+    ordered = [inferred] if inferred in FETCHERS else []
+    for key in ["ETF", "LOF", "OPEN_FUND", "A_STOCK", "US_ETF"]:
+        if key not in ordered:
+            ordered.append(key)
+    return ordered
+
+
+def _failure_message(code: str, selected_key: str, strict: bool, errors: list[str]) -> str:
+    label = _asset_label(selected_key)
+    if selected_key == "LOF" and strict:
+        return (
+            f"当前代码 {code} 按 LOF / 场内基金识别，但 LOF 数据接口获取失败。"
+            "你可以手动切换为开放式基金净值口径重新分析。"
+            + (" 详细错误：" + "；".join(errors) if errors else "")
+        )
+    return f"当前代码 {code} 按 {label} 口径获取数据失败。" + (" 详细错误：" + "；".join(errors) if errors else "")
+
+
+def fetch_asset_data_auto(code: str, preferred_type: str = "自动识别", strict: bool = True) -> dict[str, Any]:
+    """按确定性代码规则识别资产类型，并按 strict 控制是否允许备用口径。"""
     code = str(code or "").strip().upper()
     if not code:
-        return _result(False, "未知", None, "请输入代码。")
+        return _result(False, "未知", None, "请输入代码。", strict=strict)
 
-    attempts: list[tuple[str, Any, str]] = []
+    inferred = infer_asset_type_by_code(code)
     if preferred_type == "自动识别":
-        if re.fullmatch(r"[A-Z.]{1,10}", code):
-            attempts = [("美股ETF", _try_us_etf, "已自动识别为美股ETF，使用 yfinance 行情数据。")]
-        elif re.fullmatch(r"\d{6}", code):
-            attempts = [
-                ("ETF", _try_china_etf, "已自动识别为ETF，使用场内ETF行情数据。"),
-                ("LOF", _try_china_lof, "该代码不是普通ETF，已自动识别为LOF/场内基金。"),
-                ("开放式基金", _try_open_fund, "该代码不是ETF，已自动识别为开放式基金，使用净值数据分析。"),
-                ("股票", _try_china_stock, "已自动识别为A股股票，使用股票行情数据。"),
-            ]
-        else:
-            return _result(False, "未知", None, "代码格式暂不支持。请尝试 6 位中国市场代码或 SPY、QQQ、VOO 这类美股代码。")
+        if inferred == "UNKNOWN":
+            return _result(
+                False,
+                "未知",
+                None,
+                "代码格式暂不支持。请尝试 6 位中国市场代码或 SPY、QQQ、VOO 这类美股代码。",
+                code=code,
+                inferred_type=inferred,
+                selected_scope=preferred_type,
+                strict=strict,
+            )
+        attempts = [inferred] if strict else _candidate_attempts(inferred)
     else:
-        mapping = {
-            "中国ETF": ("ETF", _try_china_etf, "按中国ETF接口获取数据。"),
-            "中国LOF": ("LOF", _try_china_lof, "按中国LOF接口获取数据。"),
-            "中国开放式基金": ("开放式基金", _try_open_fund, "按开放式基金净值接口获取数据。"),
-            "中国股票": ("股票", _try_china_stock, "按A股股票接口获取数据。"),
-            "美股ETF": ("美股ETF", _try_us_etf, "按美股ETF接口获取数据。"),
-        }
-        if preferred_type not in mapping:
-            return fetch_asset_data_auto(code, preferred_type="自动识别")
-        attempts = [mapping[preferred_type]]
+        selected_key = SOURCE_OPTIONS_MAP.get(preferred_type)
+        if selected_key is None:
+            return fetch_asset_data_auto(code, preferred_type="自动识别", strict=strict)
+        attempts = [selected_key]
 
     errors = []
-    for asset_type, func, success_message in attempts:
+    for idx, selected_key in enumerate(attempts):
+        func, source_name, quote_type, adjustment = FETCHERS[selected_key]
         data, error = func(code)
         if not data.empty:
-            return _result(True, asset_type, data, success_message, asset_name=code)
-        errors.append(f"{asset_type}: {error}")
+            actual_label = _asset_label(selected_key)
+            if preferred_type == "自动识别":
+                message = f"已按代码规则自动识别为{actual_label}，使用{quote_type}口径。"
+            else:
+                message = f"已按用户选择的{preferred_type}获取数据，使用{quote_type}口径。"
+            return _result(
+                True,
+                actual_label,
+                data,
+                message,
+                asset_name=code,
+                code=code,
+                inferred_type=inferred,
+                selected_scope=preferred_type,
+                actual_scope=preferred_type if preferred_type != "自动识别" else actual_label,
+                data_source=source_name,
+                quote_type=quote_type,
+                adjustment=adjustment,
+                used_fallback=idx > 0,
+                strict=strict,
+                errors=errors,
+            )
+        errors.append(f"{_asset_label(selected_key)}: {error}")
+        if strict:
+            break
 
     return _result(
         False,
-        "未知",
+        _asset_label(attempts[0] if attempts else inferred),
         None,
-        "未获取到该代码数据。可能原因：代码不存在、代码类型暂不支持、数据源异常或网络问题。请尝试使用候选标的池里的常见标的。"
-        + (" 详细尝试：" + "；".join(errors) if errors else ""),
+        _failure_message(code, attempts[0] if attempts else inferred, strict, errors),
+        code=code,
+        inferred_type=inferred,
+        selected_scope=preferred_type,
+        actual_scope=_asset_label(attempts[0] if attempts else inferred),
+        data_source=FETCHERS.get(attempts[0], (None, "", "", ""))[1] if attempts else "",
+        quote_type=FETCHERS.get(attempts[0], (None, "", "", ""))[2] if attempts else "",
+        adjustment=FETCHERS.get(attempts[0], (None, "", "", ""))[3] if attempts else "",
+        strict=strict,
+        errors=errors,
     )
+
+
+def build_consistency_report(result: dict[str, Any], metrics_hash: str = "") -> dict[str, Any]:
+    versions = result.get("runtime_versions", {})
+    return {
+        "code": result.get("code", ""),
+        "infer_asset_type_by_code": result.get("inferred_asset_type", ""),
+        "实际使用数据源": result.get("data_source", ""),
+        "latest_date": result.get("latest_date", ""),
+        "latest_close": result.get("latest_close", None),
+        "first_date": result.get("first_date", ""),
+        "rows": result.get("rows", 0),
+        "close_head_3": json.dumps(result.get("close_head_3", []), ensure_ascii=False),
+        "close_tail_3": json.dumps(result.get("close_tail_3", []), ensure_ascii=False),
+        "data_hash": result.get("data_hash", ""),
+        "metrics_hash": metrics_hash,
+        "akshare 版本": versions.get("akshare", ""),
+        "pandas 版本": versions.get("pandas", ""),
+        "numpy 版本": versions.get("numpy", ""),
+        "streamlit 版本": versions.get("streamlit", ""),
+        "当前环境": result.get("environment", ""),
+        "当前 APP_VERSION": result.get("app_version", APP_VERSION),
+        "Python": platform.python_version(),
+    }

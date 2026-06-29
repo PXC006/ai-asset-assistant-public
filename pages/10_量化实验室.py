@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from src.backtest_engine import buy_and_hold_backtest, fixed_investment_backtest, moving_average_backtest
+from src.config import APP_VERSION
 from src.data_fetcher import fetch_asset_data_auto
 from src.utils import format_currency, format_percent, show_risk_notice
 from src.ui_style import apply_global_style
@@ -40,9 +41,9 @@ METRIC_HELP = {
 }
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_market_data(source: str, code: str):
-    return fetch_asset_data_auto(code, preferred_type=source)
+@st.cache_data(ttl=21600, show_spinner=False)
+def load_market_data(source: str, code: str, app_version: str):
+    return fetch_asset_data_auto(code, preferred_type=source, strict=True)
 
 
 def pct_or_na(value) -> str:
@@ -121,7 +122,7 @@ default_code = EXAMPLES[example] if example != "手动输入" else "510300"
 code = top3.text_input("代码", value=default_code)
 strategy = top4.selectbox("策略", ["简单定投", "均线策略", "买入持有基准"])
 
-result = load_market_data(source, code) if code else {"success": False, "data": pd.DataFrame(), "message": "请输入代码。", "asset_type": "未知"}
+result = load_market_data(source, code, APP_VERSION) if code else {"success": False, "data": pd.DataFrame(), "message": "请输入代码。", "asset_type": "未知"}
 if result["success"]:
     st.success(f"{result['message']} 当前识别类型：{result['asset_type']}。")
     df = result["data"].copy()
