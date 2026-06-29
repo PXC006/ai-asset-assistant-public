@@ -5,7 +5,10 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from src.backtest_engine import buy_and_hold_backtest, fixed_investment_backtest, moving_average_backtest
-from src.config import APP_VERSION
+try:
+    from src.config import APP_VERSION
+except Exception:
+    APP_VERSION = "unknown-version"
 from src.data_fetcher import fetch_asset_data_auto
 from src.utils import format_currency, format_percent, show_risk_notice
 from src.ui_style import apply_global_style

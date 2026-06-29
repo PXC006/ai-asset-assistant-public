@@ -5,7 +5,10 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from src.config import APP_VERSION
+try:
+    from src.config import APP_VERSION
+except Exception:
+    APP_VERSION = "unknown-version"
 from src.database import add_watch_item, fetch_df
 from src.data_fetcher import build_consistency_report, fetch_asset_data_auto, infer_asset_type_by_code
 from src.fund_analyzer import analyze_fund_dataframe

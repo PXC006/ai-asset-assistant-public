@@ -7,7 +7,10 @@ from typing import Any
 
 import pandas as pd
 
-from .config import APP_VERSION
+try:
+    from .config import APP_VERSION
+except Exception:
+    APP_VERSION = "unknown-version"
 
 
 ETF_PREFIXES = ("510", "511", "512", "513", "515", "516", "517", "518", "519", "560", "561", "562", "563", "588", "159")
