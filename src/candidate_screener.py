@@ -11,6 +11,7 @@ from .risk_engine import (
     calculate_return_by_period,
     calculate_sharpe_ratio,
 )
+from .static_candidates import STATIC_CANDIDATES
 
 
 ASSET_CLASS_DIRECTIONS = {
@@ -93,6 +94,10 @@ FALLBACK_CANDIDATES = [
     ("159928", "消费ETF", "行业主题", "消费", "高风险", 50.0),
     ("512880", "证券ETF", "行业主题", "证券", "高风险", 55.0),
 ]
+
+
+if STATIC_CANDIDATES:
+    FALLBACK_CANDIDATES = STATIC_CANDIDATES
 
 
 def _money(value) -> float | None:
@@ -208,7 +213,47 @@ def _classify(asset_class: str, direction: str, score: float, max_drawdown) -> s
     return "暂不适合"
 
 
-def screen_candidates_by_direction(asset_class: str, direction: str, max_results: int = 10) -> dict:
+def _static_screen_candidates(asset_class: str, direction: str, max_results: int = 10) -> dict:
+    filtered = _filter_by_direction(_fallback_frame(), asset_class, direction)
+    rows = []
+    for _, item in filtered.head(max_results).iterrows():
+        rows.append(
+            {
+                "代码": item.get("代码", ""),
+                "名称": item.get("名称", ""),
+                "资产大类": item.get("资产大类", asset_class),
+                "方向": item.get("方向", direction),
+                "评分": 62,
+                "分类": "候选观察",
+                "风险等级": item.get("风险等级", "中风险"),
+                "近1年收益": None,
+                "近3年收益": None,
+                "最大回撤": None,
+                "年化波动率": None,
+                "夏普比率": None,
+                "成交额/规模": _money(item.get("成交额")) or _money(item.get("规模")),
+                "费用": "暂无",
+                "数据起始日期": "未联网",
+                "数据年限": 0.0,
+                "备注": "快速模式仅展示常用示例候选，不生成收益、回撤、夏普等历史指标；请进入基金ETF分析页按严格口径分析。",
+                "数据来源": "内置基础示例池",
+            }
+        )
+    result = pd.DataFrame(rows)
+    if not result.empty:
+        result.insert(0, "排名", range(1, len(result) + 1))
+    return {
+        "results": result,
+        "is_fallback": True,
+        "message": "当前为快速候选池：仅读取内置常用示例，不调用重型行情接口。",
+        "errors": [],
+    }
+
+
+def screen_candidates_by_direction(asset_class: str, direction: str, max_results: int = 10, mode: str = "quick") -> dict:
+    if mode != "deep":
+        return _static_screen_candidates(asset_class, direction, max_results=max_results)
+
     live_df, errors = fetch_available_fund_candidates()
     using_fallback = live_df.empty
     source_message = ""

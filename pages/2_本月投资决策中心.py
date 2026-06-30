@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from src.auth import require_user_key, current_user_key
 from src.database import (
     fetch_df,
     get_decision_record_by_id,
@@ -28,6 +29,7 @@ from src.ui_components import info_box, metric_card, page_header
 
 st.set_page_config(page_title="本月投资决策中心", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 apply_global_style()
+require_user_key()
 
 FIELD_KEYS = {
     "profile_name": "decision_profile_name",
@@ -100,7 +102,7 @@ def render_dict_as_chinese_table(data: dict) -> None:
 
 
 def aggregate_holdings_to_profile() -> tuple[dict, list[str]]:
-    df = fetch_df("SELECT asset_type, current_value FROM asset_records")
+    df = fetch_df("SELECT asset_type, current_value FROM asset_records WHERE user_key=?", (current_user_key(),))
     if df.empty:
         return {}, ["持仓池暂无资产，无法汇总。"]
 

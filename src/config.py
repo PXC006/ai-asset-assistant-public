@@ -5,7 +5,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 PUBLIC_EMPTY_MODE = True
 PRIVATE_MODE = False
-APP_VERSION = "public-miroom-2026-06-30-001"
+APP_VERSION = "public-miroom-cache-2026-06-30-001"
 DB_PATH = DATA_DIR / "public_empty.db"
 
 DEFAULT_CURRENT_AGE = 0
@@ -18,7 +18,7 @@ RISK_FREE_RATE = 0.02
 DEFAULT_FEE_RATE = 0.001
 
 RISK_NOTICE = "风险提示：以上内容仅用于个人资产管理辅助分析，不构成投资建议；请结合自身情况独立决策。"
-PUBLIC_MODE_NOTICE = "公开体验版｜初始数据已清零｜请勿填写敏感个人资产信息｜不构成投资建议"
+PUBLIC_MODE_NOTICE = "朋友体验版｜密室码仅用于区分数据｜不是正式账号系统｜请勿填写敏感个人资产信息｜不构成投资建议"
 
 ASSET_TYPES = [
     "现金/货币基金",

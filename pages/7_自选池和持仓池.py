@@ -3,6 +3,7 @@ from datetime import date
 import plotly.express as px
 import streamlit as st
 
+from src.auth import current_user_key
 from src.database import add_asset, delete_by_id, fetch_df
 from src.utils import show_risk_notice, translate_columns
 from src.ui_style import apply_global_style
@@ -19,7 +20,7 @@ info_box("持仓池是你真实已经买入的资产，用于后续汇总资产�
 tab1, tab2 = st.tabs(["自选池：准备长期观察", "持仓池：真实已经买入"])
 
 with tab1:
-    watch_df = fetch_df("SELECT * FROM watchlist ORDER BY id DESC")
+    watch_df = fetch_df("SELECT * FROM watchlist WHERE user_key=? ORDER BY id DESC", (current_user_key(),))
     if watch_df.empty:
         st.warning("自选池还没有标的。建议先去“候选标的池”选择方向，再加入自选池。")
         st.page_link("pages/5_候选标的池.py", label="去候选标的池", icon="➡️")
@@ -65,7 +66,7 @@ with tab1:
                     st.success("已转入持仓池。自选记录会保留，方便继续观察。")
 
 with tab2:
-    asset_df = fetch_df("SELECT * FROM asset_records ORDER BY id DESC")
+    asset_df = fetch_df("SELECT * FROM asset_records WHERE user_key=? ORDER BY id DESC", (current_user_key(),))
     if asset_df.empty:
         st.warning("持仓池还没有资产。只有真实买入后，才建议加入持仓池。")
     else:

@@ -1,9 +1,10 @@
+from .auth import current_user_key
 from .database import add_watch_item, delete_by_id, fetch_df
 
 
 def list_watch_items():
     """读取自选池。"""
-    return fetch_df("SELECT * FROM watchlist ORDER BY id DESC")
+    return fetch_df("SELECT * FROM watchlist WHERE user_key=? ORDER BY id DESC", (current_user_key(),))
 
 
 def create_watch_item(record: dict) -> None:
@@ -14,4 +15,3 @@ def create_watch_item(record: dict) -> None:
 def remove_watch_item(row_id: int) -> None:
     """删除自选标的。"""
     delete_by_id("watchlist", row_id)
-

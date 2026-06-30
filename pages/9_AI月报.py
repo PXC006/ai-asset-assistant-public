@@ -2,6 +2,7 @@ from datetime import date
 
 import streamlit as st
 
+from src.auth import current_user_key
 from src.database import fetch_df, load_latest_decision_profile, load_monthly_decision_records, load_recent_trade_records, save_monthly_report
 from src.report_generator import generate_ai_report
 from src.utils import format_currency, translate_columns
@@ -15,7 +16,7 @@ apply_global_style()
 page_header("AI 月报", "把现金流、目标进度、定投执行和风险提示整理成一份月度资产报告。")
 
 profile = load_latest_decision_profile()
-cashflow_df = fetch_df("SELECT * FROM cashflow_records ORDER BY month DESC LIMIT 1")
+cashflow_df = fetch_df("SELECT * FROM cashflow_records WHERE user_key=? ORDER BY month DESC LIMIT 1", (current_user_key(),))
 decision_df = load_monthly_decision_records(1)
 trade_df = load_recent_trade_records(20)
 
@@ -77,7 +78,7 @@ else:
     st.dataframe(translate_columns(trade_df), use_container_width=True, hide_index=True)
 
 st.subheader("历史月报")
-report_df = fetch_df("SELECT * FROM monthly_reports ORDER BY report_month DESC")
+report_df = fetch_df("SELECT * FROM monthly_reports WHERE user_key=? ORDER BY report_month DESC", (current_user_key(),))
 if report_df.empty:
     st.info("还没有历史月报。")
 else:

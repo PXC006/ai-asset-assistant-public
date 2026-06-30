@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+from src.auth import current_user_key
 from src.candidate_screener import ASSET_CLASS_DIRECTIONS, screen_candidates_by_direction
 from src.database import add_watch_item, fetch_df
 from src.utils import format_percent, show_risk_notice
@@ -16,6 +17,7 @@ def init_filter_state() -> None:
     st.session_state.setdefault("candidate_asset_class", "宽基指数")
     st.session_state.setdefault("candidate_direction", "沪深300")
     st.session_state.setdefault("candidate_max_results", 10)
+    st.session_state.setdefault("candidate_mode", "快速候选池")
     if st.session_state.get("candidate_prefill_from_decision"):
         asset_class = st.session_state.get("candidate_prefill_asset_class", "宽基指数")
         direction = st.session_state.get("candidate_prefill_direction", "沪深300")
@@ -61,7 +63,7 @@ def prefill_analysis(row: dict, source_label: str = "动态候选筛选器") -> 
 
 
 def add_candidate_to_watchlist(row: dict) -> None:
-    exists = fetch_df("SELECT id FROM watchlist WHERE code=? LIMIT 1", (row["代码"],))
+    exists = fetch_df("SELECT id FROM watchlist WHERE user_key=? AND code=? LIMIT 1", (current_user_key(), row["代码"]))
     if not exists.empty:
         st.info("该标的已在自选池中。")
         return
@@ -90,17 +92,19 @@ st.info(
     "波动率、夏普比率和数据完整性给出候选观察列表。候选观察不等于买入建议。"
 )
 
-c1, c2, c3 = st.columns([1.2, 1.2, 0.8])
+c1, c2, c3, c4 = st.columns([1.2, 1.2, 0.8, 1.0])
 c1.selectbox("资产大类", list(ASSET_CLASS_DIRECTIONS.keys()), key="candidate_asset_class", on_change=sync_direction_options)
 c2.selectbox("具体方向", ASSET_CLASS_DIRECTIONS[st.session_state["candidate_asset_class"]], key="candidate_direction")
 c3.number_input("最多显示数量", min_value=3, max_value=20, step=1, key="candidate_max_results")
+c4.selectbox("筛选模式", ["快速候选池", "深度动态筛选"], key="candidate_mode")
 
 if st.button("开始筛选候选标的", type="primary"):
-    with st.spinner("正在筛选候选标的，动态数据不可用时会自动使用基础示例池兜底。"):
+    with st.spinner("正在筛选候选标的。快速模式不调用重型行情接口；深度模式可能需要更久。"):
         st.session_state["candidate_last_result"] = screen_candidates_by_direction(
             st.session_state["candidate_asset_class"],
             st.session_state["candidate_direction"],
             max_results=int(st.session_state["candidate_max_results"]),
+            mode="deep" if st.session_state.get("candidate_mode") == "深度动态筛选" else "quick",
         )
 
 result = st.session_state.get("candidate_last_result")

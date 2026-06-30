@@ -3,6 +3,7 @@ import html
 import streamlit as st
 
 from .config import PUBLIC_EMPTY_MODE, PUBLIC_MODE_NOTICE
+from .auth import require_user_key
 
 
 STATUS_CLASS = {
@@ -14,8 +15,10 @@ STATUS_CLASS = {
 
 
 def page_header(title: str, subtitle: str = "") -> None:
+    require_user_key()
     if PUBLIC_EMPTY_MODE:
         st.caption(PUBLIC_MODE_NOTICE)
+        st.caption("体验数据和缓存数据可能因云端应用重启、休眠或更新而丢失。")
     st.markdown(f"# {html.escape(title)}")
     if subtitle:
         st.caption(subtitle)

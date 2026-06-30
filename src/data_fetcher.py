@@ -11,6 +11,7 @@ try:
     from .config import APP_VERSION
 except Exception:
     APP_VERSION = "unknown-version"
+from .database import load_market_data_cache, log_failed_fetch, save_market_data_cache
 
 
 ETF_PREFIXES = ("510", "511", "512", "513", "515", "516", "517", "518", "519", "560", "561", "562", "563", "588", "159")
@@ -410,6 +411,55 @@ def _candidate_attempts(inferred: str) -> list[str]:
     return ordered
 
 
+def _selected_asset_key(code: str, analysis_scope: str) -> str:
+    if analysis_scope == "自动识别":
+        return infer_asset_type_by_code(code)
+    return SOURCE_OPTIONS_MAP.get(analysis_scope, SOURCE_OPTIONS_MAP.get(str(analysis_scope), "UNKNOWN"))
+
+
+def _cache_identity(code: str, analysis_scope: str) -> dict[str, str]:
+    asset_key = _selected_asset_key(code, analysis_scope)
+    source_name = ""
+    quote_type = ""
+    if asset_key in FETCHERS:
+        _func, source_name, quote_type, _adjustment = FETCHERS[asset_key]
+    return {
+        "code": str(code or "").strip().upper(),
+        "asset_key": asset_key,
+        "asset_type": _asset_label(asset_key),
+        "data_source": source_name,
+        "analysis_scope": analysis_scope if analysis_scope != "自动识别" else _asset_label(asset_key),
+        "price_type": quote_type,
+    }
+
+
+def _result_from_cache(cache: dict, identity: dict[str, str], selected_scope: str, *, stale: bool) -> dict[str, Any]:
+    frame = cache.get("data", pd.DataFrame(columns=["date", "close"]))
+    message = "已使用本地缓存数据。"
+    if stale:
+        message = "实时数据接口暂不可用，已使用同一口径的旧缓存数据。"
+    result = _result(
+        True,
+        identity["asset_type"],
+        frame,
+        message,
+        asset_name=identity["code"],
+        code=identity["code"],
+        inferred_type=infer_asset_type_by_code(identity["code"]),
+        selected_scope=selected_scope,
+        actual_scope=identity["analysis_scope"],
+        data_source=identity["data_source"],
+        quote_type=identity["price_type"],
+        adjustment=FETCHERS.get(identity["asset_key"], (None, "", "", ""))[3],
+        used_fallback=False,
+        strict=True,
+    )
+    result["from_cache"] = True
+    result["cache_stale"] = stale
+    result["cache_updated_at"] = cache.get("updated_at", "")
+    return result
+
+
 def _failure_message(code: str, selected_key: str, strict: bool, errors: list[str]) -> str:
     label = _asset_label(selected_key)
     if selected_key == "LOF" and strict:
@@ -493,6 +543,88 @@ def fetch_asset_data_auto(code: str, preferred_type: str = "自动识别", stric
         strict=strict,
         errors=errors,
     )
+
+
+def fetch_asset_data_with_cache(
+    code: str,
+    analysis_scope: str = "自动识别",
+    *,
+    force_refresh: bool = False,
+    strict: bool = True,
+    cache_ttl_hours: int = 6,
+) -> dict[str, Any]:
+    """Fetch market data with a strict same-scope cache."""
+    normalized_code = str(code or "").strip().upper()
+    if not normalized_code:
+        return _result(False, "未知", None, "请输入代码。", strict=strict)
+
+    identity = _cache_identity(normalized_code, analysis_scope)
+    if identity["asset_key"] not in FETCHERS:
+        return fetch_asset_data_auto(normalized_code, preferred_type=analysis_scope, strict=strict)
+
+    fresh_cache = None
+    if not force_refresh:
+        fresh_cache = load_market_data_cache(
+            identity["code"],
+            identity["asset_type"],
+            identity["data_source"],
+            identity["analysis_scope"],
+            identity["price_type"],
+            max_age_hours=cache_ttl_hours,
+        )
+        if fresh_cache is not None and not fresh_cache.get("is_stale") and not fresh_cache.get("data", pd.DataFrame()).empty:
+            return _result_from_cache(fresh_cache, identity, analysis_scope, stale=False)
+
+    live_result = fetch_asset_data_auto(normalized_code, preferred_type=analysis_scope, strict=strict)
+    if live_result.get("success"):
+        live_identity = {
+            "code": live_result.get("code", identity["code"]),
+            "asset_key": identity["asset_key"],
+            "asset_type": live_result.get("asset_type", identity["asset_type"]),
+            "data_source": live_result.get("data_source", identity["data_source"]),
+            "analysis_scope": live_result.get("actual_scope", identity["analysis_scope"]),
+            "price_type": live_result.get("quote_type", identity["price_type"]),
+        }
+        save_market_data_cache(
+            code=live_identity["code"],
+            asset_type=live_identity["asset_type"],
+            data_source=live_identity["data_source"],
+            analysis_scope=live_identity["analysis_scope"],
+            price_type=live_identity["price_type"],
+            data=live_result.get("data", pd.DataFrame()),
+            data_hash=live_result.get("data_hash", ""),
+            fetch_status="success",
+            error_message="",
+        )
+        live_result["from_cache"] = False
+        live_result["cache_stale"] = False
+        live_result["cache_updated_at"] = ""
+        return live_result
+
+    log_failed_fetch(
+        code=identity["code"],
+        asset_type=identity["asset_type"],
+        data_source=identity["data_source"],
+        analysis_scope=identity["analysis_scope"],
+        price_type=identity["price_type"],
+        error_message=live_result.get("message", ""),
+    )
+    stale_cache = fresh_cache or load_market_data_cache(
+        identity["code"],
+        identity["asset_type"],
+        identity["data_source"],
+        identity["analysis_scope"],
+        identity["price_type"],
+        max_age_hours=None,
+    )
+    if stale_cache is not None and not stale_cache.get("data", pd.DataFrame()).empty:
+        cached = _result_from_cache(stale_cache, identity, analysis_scope, stale=True)
+        cached["errors"] = live_result.get("errors", [])
+        return cached
+    live_result["from_cache"] = False
+    live_result["cache_stale"] = False
+    live_result["cache_updated_at"] = ""
+    return live_result
 
 
 def build_consistency_report(result: dict[str, Any], metrics_hash: str = "") -> dict[str, Any]:

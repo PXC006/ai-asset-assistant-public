@@ -9,8 +9,9 @@ try:
     from src.config import APP_VERSION
 except Exception:
     APP_VERSION = "unknown-version"
+from src.auth import current_user_key
 from src.database import add_watch_item, fetch_df
-from src.data_fetcher import build_consistency_report, fetch_asset_data_auto, infer_asset_type_by_code
+from src.data_fetcher import build_consistency_report, fetch_asset_data_with_cache, infer_asset_type_by_code
 from src.fund_analyzer import analyze_fund_dataframe
 from src.utils import format_percent, show_risk_notice
 from src.ui_style import apply_global_style
@@ -44,8 +45,8 @@ LEGACY_SCOPE_MAP = {
 
 
 @st.cache_data(ttl=21600, show_spinner=False)
-def load_strict_asset_data(code: str, scope: str, app_version: str):
-    return fetch_asset_data_auto(code, preferred_type=scope, strict=True)
+def load_strict_asset_data(code: str, scope: str, app_version: str, force_refresh: bool = False):
+    return fetch_asset_data_with_cache(code, analysis_scope=scope, force_refresh=force_refresh, strict=True)
 
 
 def metrics_hash(analysis: dict) -> str:
@@ -112,7 +113,7 @@ def add_current_to_watchlist() -> None:
     if not code:
         st.warning("请先填写代码。")
         return
-    exists = fetch_df("SELECT id FROM watchlist WHERE code=? LIMIT 1", (code,))
+    exists = fetch_df("SELECT id FROM watchlist WHERE user_key=? AND code=? LIMIT 1", (current_user_key(), code))
     if not exists.empty:
         st.info("该标的已在自选池中。")
         return
@@ -158,6 +159,7 @@ if st.session_state.get("analysis_prefill_from_candidate"):
 refresh = st.button("刷新数据，忽略缓存")
 if refresh:
     load_strict_asset_data.clear()
+    st.session_state["fund_force_refresh_once"] = True
     st.success("已清除基金ETF分析页数据缓存，请点击“获取并分析”重新获取。")
 
 if st.button("获取并分析", type="primary"):
@@ -166,7 +168,8 @@ if st.button("获取并分析", type="primary"):
     if not code:
         st.warning("请先输入基金、ETF 或股票代码。")
     else:
-        result = load_strict_asset_data(code.upper(), scope, APP_VERSION)
+        force_refresh = bool(st.session_state.pop("fund_force_refresh_once", False))
+        result = load_strict_asset_data(code.upper(), scope, APP_VERSION, force_refresh)
         if not result["success"]:
             st.warning(result["message"])
             diagnosis = {
@@ -177,6 +180,9 @@ if st.button("获取并分析", type="primary"):
                 "数据源": result.get("data_source", ""),
                 "是否使用备用源": "是" if result.get("used_fallback") else "否",
                 "strict 模式": "是" if result.get("strict") else "否",
+                "是否来自缓存": "是" if result.get("from_cache") else "否",
+                "是否旧缓存": "是" if result.get("cache_stale") else "否",
+                "缓存更新时间": result.get("cache_updated_at", ""),
                 "错误": "；".join(result.get("errors", [])),
                 "当前 APP_VERSION": APP_VERSION,
             }
@@ -204,6 +210,9 @@ if st.button("获取并分析", type="primary"):
                     "数据源": result.get("data_source", ""),
                     "是否使用备用源": "是" if result.get("used_fallback") else "否",
                     "strict 模式": "是" if result.get("strict") else "否",
+                    "是否来自缓存": "是" if result.get("from_cache") else "否",
+                    "是否旧缓存": "是" if result.get("cache_stale") else "否",
+                    "缓存更新时间": result.get("cache_updated_at", ""),
                     "起始日期": result.get("first_date", ""),
                     "结束日期": result.get("latest_date", ""),
                     "最新交易日 / 最新净值日期": result.get("latest_date", ""),
