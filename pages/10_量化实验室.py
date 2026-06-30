@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.auth import render_user_sidebar, require_user_key
 from src.backtest_engine import buy_and_hold_backtest, fixed_investment_backtest, moving_average_backtest
 try:
     from src.config import APP_VERSION
@@ -17,6 +18,8 @@ from src.ui_components import page_header
 
 st.set_page_config(page_title="量化实验室", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 apply_global_style()
+require_user_key()
+render_user_sidebar()
 
 BACKTEST_NOTICE = "回测不代表未来收益。以上内容仅用于个人资产管理辅助分析，不构成投资建议。未来行情无法通过历史回测直接预测。"
 SOURCE_OPTIONS = ["自动识别", "中国ETF", "中国LOF", "中国开放式基金", "中国股票", "美股ETF"]

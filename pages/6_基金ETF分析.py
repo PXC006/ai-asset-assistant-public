@@ -9,7 +9,7 @@ try:
     from src.config import APP_VERSION
 except Exception:
     APP_VERSION = "unknown-version"
-from src.auth import current_user_key
+from src.auth import current_user_key, render_user_sidebar, require_user_key
 from src.database import add_watch_item, fetch_df
 from src.data_fetcher import build_consistency_report, fetch_asset_data_with_cache, infer_asset_type_by_code
 from src.fund_analyzer import analyze_fund_dataframe
@@ -20,6 +20,8 @@ from src.ui_components import page_header
 
 st.set_page_config(page_title="基金ETF分析", page_icon="🔎", layout="wide", initial_sidebar_state="expanded")
 apply_global_style()
+require_user_key()
+render_user_sidebar()
 
 EXAMPLES = {
     "宽基ETF｜沪深300ETF示例 510300": ("510300", "沪深300ETF示例", "宽基ETF"),
@@ -149,20 +151,20 @@ c3.text_input("代码", key="fund_analysis_code")
 
 n1, n2 = st.columns([2, 1])
 n1.text_input("名称", key="fund_analysis_name")
-if n2.button("清空当前分析标的", on_click=clear_analysis_target):
+if n2.button("清空当前分析标的", key="fund_clear_analysis_target_btn", on_click=clear_analysis_target):
     st.info("已清空当前分析标的，可以手动输入其他代码。")
 
 if st.session_state.get("analysis_prefill_from_candidate"):
-    if st.button("加入自选池"):
+    if st.button("加入自选池", key="fund_add_current_to_watchlist_btn"):
         add_current_to_watchlist()
 
-refresh = st.button("刷新数据，忽略缓存")
+refresh = st.button("刷新数据，忽略缓存", key="fund_refresh_ignore_cache_btn")
 if refresh:
     load_strict_asset_data.clear()
     st.session_state["fund_force_refresh_once"] = True
     st.success("已清除基金ETF分析页数据缓存，请点击“获取并分析”重新获取。")
 
-if st.button("获取并分析", type="primary"):
+if st.button("获取并分析", type="primary", key="fund_fetch_and_analyze_btn"):
     code = st.session_state.get("fund_analysis_code", "").strip()
     scope = st.session_state.get("fund_analysis_scope", "自动识别")
     if not code:

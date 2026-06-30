@@ -4,6 +4,7 @@ import plotly.express as px
 import streamlit as st
 
 from src.cashflow import calculate_cashflow, detect_expense_anomaly
+from src.auth import render_user_sidebar, require_user_key
 from src.database import load_cashflow_record_by_month, load_recent_cashflow_records, save_cashflow_record
 from src.utils import format_currency, format_percent, show_risk_notice, translate_columns
 from src.ui_style import apply_global_style
@@ -12,6 +13,8 @@ from src.ui_components import info_box, metric_card, page_header
 
 st.set_page_config(page_title="现金流记录", page_icon="💧", layout="wide", initial_sidebar_state="expanded")
 apply_global_style()
+require_user_key()
+render_user_sidebar()
 
 page_header("现金流记录", "记录每月收入、支出、结余和真实投入金额，看清长期复利计划的现金来源。")
 

@@ -1,5 +1,6 @@
 import streamlit as st
 
+from src.auth import render_user_sidebar, require_user_key
 from src.database import load_latest_decision_profile, save_decision_profile
 from src.emergency_fund import emergency_targets, evaluate_emergency_fund
 from src.utils import format_currency, show_risk_notice
@@ -9,6 +10,8 @@ from src.ui_components import info_box, metric_card, page_header
 
 st.set_page_config(page_title="备用金管理", page_icon="🛟", layout="wide", initial_sidebar_state="expanded")
 apply_global_style()
+require_user_key()
+render_user_sidebar()
 
 page_header("备用金管理", "管理现金安全垫，先保证生活和突发支出，再推进长期投资计划。")
 

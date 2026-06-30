@@ -39,7 +39,7 @@ def render_entry_gate() -> bool:
     st.info("请记住你的密室码。下次输入同一个密室码，可以继续查看自己的体验数据。")
 
     key = st.text_input("请输入密室码 / 体验邀请码", key="entry_user_key")
-    if st.button("进入我的密室", type="primary"):
+    if st.button("进入我的密室", type="primary", key="auth_enter_room_btn"):
         normalized = normalize_user_key(key)
         if not is_valid_user_key(normalized):
             st.warning("密室码只能包含英文、数字、下划线或中横线，长度 3–32 位。")
@@ -59,20 +59,23 @@ def render_entry_gate() -> bool:
 
 
 def render_user_sidebar() -> None:
+    if st.session_state.get("_user_sidebar_rendered", False):
+        return
     key = current_user_key()
     if not key:
         return
+    st.session_state["_user_sidebar_rendered"] = True
     st.sidebar.caption(f"当前密室码：{key}")
     st.sidebar.info("朋友体验版｜密室码仅用于区分数据｜不是正式账号系统｜请勿填写敏感个人资产信息｜不构成投资建议")
     st.sidebar.caption("体验数据和缓存数据可能因云端应用重启、休眠或更新而丢失。")
-    if st.sidebar.button("切换密室码"):
+    if st.sidebar.button("切换密室码", key="auth_switch_user_key_btn"):
         st.session_state.pop("current_user_key", None)
         clear_current_user_session()
         st.rerun()
     st.sidebar.divider()
-    st.sidebar.checkbox("确认清空当前密室数据", key="confirm_clear_current_room")
-    if st.sidebar.button("清空当前密室数据"):
-        if not st.session_state.get("confirm_clear_current_room"):
+    st.sidebar.checkbox("确认清空当前密室数据", key="confirm_clear_current_room_data")
+    if st.sidebar.button("清空当前密室数据", key="auth_clear_current_user_data_btn"):
+        if not st.session_state.get("confirm_clear_current_room_data"):
             st.sidebar.warning("请先勾选确认，只会清空当前密室码下的个人体验数据。")
         else:
             from .database import clear_user_data
@@ -80,12 +83,12 @@ def render_user_sidebar() -> None:
             clear_user_data(key)
             clear_current_user_session()
             st.session_state["current_user_key"] = key
-            st.session_state["confirm_clear_current_room"] = False
+            st.session_state["confirm_clear_current_room_data"] = False
             st.sidebar.success("当前密室数据已清空。")
             st.rerun()
 
 
 def require_user_key() -> str:
     render_entry_gate()
-    render_user_sidebar()
+    st.session_state["_user_sidebar_rendered"] = False
     return current_user_key()

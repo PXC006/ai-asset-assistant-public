@@ -3,6 +3,7 @@ import plotly.express as px
 import streamlit as st
 
 from src.config import CORE_RETURN_OPTIONS, STAGE_GOALS
+from src.auth import render_user_sidebar, require_user_key
 from src.database import load_latest_decision_profile
 from src.decision_engine import generate_monthly_investment_plan
 from src.goal_calculator import calculate_future_value, calculate_progress_status, calculate_required_monthly_investment
@@ -13,6 +14,8 @@ from src.ui_components import info_box, metric_card, page_header
 
 st.set_page_config(page_title="首页目标仪表盘", page_icon="📈", layout="wide", initial_sidebar_state="expanded")
 apply_global_style()
+require_user_key()
+render_user_sidebar()
 
 page_header("首页｜目标仪表盘", "读取本月投资决策中心最新保存的数据，显示目标进度、现金安全垫和本月状态。")
 

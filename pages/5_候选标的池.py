@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from src.auth import current_user_key
+from src.auth import current_user_key, render_user_sidebar, require_user_key
 from src.candidate_screener import ASSET_CLASS_DIRECTIONS, screen_candidates_by_direction
 from src.database import add_watch_item, fetch_df
 from src.utils import format_percent, show_risk_notice
@@ -11,6 +11,8 @@ from src.ui_components import page_header
 
 st.set_page_config(page_title="动态候选筛选器", page_icon="📋", layout="wide", initial_sidebar_state="expanded")
 apply_global_style()
+require_user_key()
+render_user_sidebar()
 
 
 def init_filter_state() -> None:

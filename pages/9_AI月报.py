@@ -2,7 +2,7 @@ from datetime import date
 
 import streamlit as st
 
-from src.auth import current_user_key
+from src.auth import current_user_key, render_user_sidebar, require_user_key
 from src.database import fetch_df, load_latest_decision_profile, load_monthly_decision_records, load_recent_trade_records, save_monthly_report
 from src.report_generator import generate_ai_report
 from src.utils import format_currency, translate_columns
@@ -12,6 +12,8 @@ from src.ui_components import info_box, page_header
 
 st.set_page_config(page_title="AI月报", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 apply_global_style()
+require_user_key()
+render_user_sidebar()
 
 page_header("AI 月报", "把现金流、目标进度、定投执行和风险提示整理成一份月度资产报告。")
 

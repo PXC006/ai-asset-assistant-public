@@ -9,7 +9,7 @@ import streamlit as st
 
 from src.config import RISK_NOTICE
 from src.database import init_db, load_latest_decision_profile
-from src.auth import require_user_key
+from src.auth import render_user_sidebar, require_user_key
 from src.ui_style import apply_global_style
 from src.ui_components import format_currency, metric_card, page_header, info_box
 
@@ -23,6 +23,7 @@ st.set_page_config(
 apply_global_style()
 init_db()
 require_user_key()
+render_user_sidebar()
 profile = load_latest_decision_profile()
 has_saved_profile = not profile.get("is_default", True)
 

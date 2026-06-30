@@ -3,7 +3,7 @@ from datetime import date
 import plotly.express as px
 import streamlit as st
 
-from src.auth import current_user_key
+from src.auth import current_user_key, render_user_sidebar, require_user_key
 from src.database import add_asset, delete_by_id, fetch_df
 from src.utils import show_risk_notice, translate_columns
 from src.ui_style import apply_global_style
@@ -12,6 +12,8 @@ from src.ui_components import info_box, page_header
 
 st.set_page_config(page_title="自选池和持仓池", page_icon="📌", layout="wide", initial_sidebar_state="expanded")
 apply_global_style()
+require_user_key()
+render_user_sidebar()
 
 page_header("自选池和持仓池", "区分候选观察和真实持仓，让后续资产配置、再平衡和月报有数据可用。")
 info_box("自选池是你的观察名单，表示你想继续关注，但不代表已经买入。", "info")

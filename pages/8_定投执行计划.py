@@ -3,6 +3,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
+from src.auth import render_user_sidebar, require_user_key
 from src.database import (
     load_latest_monthly_decision_record,
     load_latest_decision_profile,
@@ -20,6 +21,8 @@ from src.ui_components import info_box, metric_card, page_header
 
 st.set_page_config(page_title="定投执行计划", page_icon="🧭", layout="wide", initial_sidebar_state="expanded")
 apply_global_style()
+require_user_key()
+render_user_sidebar()
 
 
 ASSET_KEY_BY_LABEL = {value: key for key, value in ASSET_LABELS.items()}
